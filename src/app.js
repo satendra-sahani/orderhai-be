@@ -5,6 +5,8 @@ import userRoutes from "./routes/userRoutes.js"
 import shopRoutes from "./routes/shopRoutes.js"
 import productRoutes from "./routes/productRoutes.js"
 import adminRoutes  from "./routes/adminRoutes.js"
+import { connectDB } from "./config/db.js"
+connectDB()
 
 const app = express()
 
