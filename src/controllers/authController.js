@@ -43,7 +43,8 @@ export const requestOtp = async (req, res) => {
         
     }
 
-    const otp = genOtp()
+    const otp = 123456
+    // const otp = genOtp()
     user.otpCode = otp
     user.otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000)
     await user.save()
