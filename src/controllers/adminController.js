@@ -80,7 +80,7 @@ export const listAdminOrders = async (req, res) => {
               minute: "2-digit",
             })
           : "",
-        createdAt: createdAtDate ? createdAtDate.toISOString() : null, // NEW: full ISO
+        createdAt: createdAtDate ? createdAtDate.toISOString() : null,
         otp: o.otp,
         shopPrice: o.shopPrice || 0,
         shopMargin: o.shopMargin || 0,
@@ -168,7 +168,6 @@ export const assignShopToOrder = async (req, res) => {
         ? order.total - shopPrice
         : order.shopMargin;
 
-    // status and timeline mapping
     if (order.status === "PENDING") {
       order.status = "CONFIRMED";
     }
@@ -296,64 +295,106 @@ export const updateOrderStatusAdmin = async (req, res) => {
 
 /**
  * GET /api/admin/orders/:orderId/nearest-shops
- * Query: ?lat=28.2&lng=76.2 (optional – if not provided, just returns all shops)
- * NOTE: simple dummy distance by absolute diff, enough for FE dropdown.
+ * Returns shops sorted by distance from order location.
+ * If no valid location data exists or no shops found nearby, returns 10 random shops.
  */
 export const getNearestShopsForOrder = async (req, res) => {
-    try {
-        const { orderId } = req.params;
+  try {
+    const { orderId } = req.params;
 
-        const order = await Order.findOne({ orderId }).lean();
-        if (!order) return res.status(404).json({ message: "Order not found" });
+    const order = await Order.findOne({ orderId }).lean();
+    if (!order) return res.status(404).json({ message: "Order not found" });
 
-        const baseLat = typeof order.lat === "number" ? order.lat : null;
-        const baseLng = typeof order.lng === "number" ? order.lng : null;
+    const baseLat = typeof order.lat === "number" ? order.lat : null;
+    const baseLng = typeof order.lng === "number" ? order.lng : null;
 
-        // Populate products with only their names
-        const shops = await Shop.find({ isActive: { $ne: false } })
-            .populate("products", "name")
-            .lean();
+    // Fetch all active shops with their products
+    const shops = await Shop.find({ isActive: { $ne: false } })
+      .populate("products", "name")
+      .lean();
 
-        let withDistance = shops.map((s) => {
-            let distanceKm = 1;
-
-            const shopLat = s.address?.latitude;
-            const shopLng = s.address?.longitude;
-
-            if (
-                baseLat != null &&
-                baseLng != null &&
-                typeof shopLat === "number" &&
-                typeof shopLng === "number"
-            ) {
-                distanceKm = getDistanceKm(baseLat, baseLng, shopLat, shopLng);
-            }
-
-            return {
-                id: s._id.toString(),
-                address: s.address?.line1 || "",
-                name: s.name,
-                phone: s.phone,
-                distanceKm: Number(distanceKm.toFixed(2)),
-                rating: s.rating || 4.5,
-                products: Array.isArray(s.products)
-                    ? s.products.map((p) => p.name)
-                    : [],
-            };
-        });
-
-        withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
-
-        // If no shops found with valid distance (e.g., all have default distance), return at least 10 shops
-        // Or, if all distances are the default (1), treat as "no nearest"
-        const hasRealDistance = withDistance.some(s => s.distanceKm !== 1);
-        if (!hasRealDistance) {
-            withDistance = withDistance.slice(0, 10);
-        }
-
-        res.json(withDistance);
-    } catch (err) {
-        console.error("getNearestShopsForOrder", err);
-        res.status(500).json({ message: "Failed to load nearest shops" });
+    // Check if we have no shops at all
+    if (!shops || shops.length === 0) {
+      return res.json([]);
     }
+
+    // Check if order has valid location coordinates
+    const hasValidOrderLocation = baseLat !== null && baseLng !== null;
+
+    let withDistance = shops.map((s) => {
+      let distanceKm = null;
+      let hasValidShopLocation = false;
+
+      const shopLat = s.address?.latitude;
+      const shopLng = s.address?.longitude;
+
+      // Check if shop has valid coordinates
+      if (typeof shopLat === "number" && typeof shopLng === "number") {
+        hasValidShopLocation = true;
+
+        // Calculate distance only if both order and shop have valid locations
+        if (hasValidOrderLocation) {
+          distanceKm = getDistanceKm(baseLat, baseLng, shopLat, shopLng);
+        }
+      }
+
+      return {
+        id: s._id.toString(),
+        address: s.address?.line1 || "",
+        name: s.name,
+        phone: s.phone,
+        distanceKm: distanceKm !== null ? Number(distanceKm.toFixed(2)) : null,
+        rating: s.rating || 4.5,
+        products: Array.isArray(s.products)
+          ? s.products.map((p) => p.name)
+          : [],
+        hasValidLocation: hasValidShopLocation,
+      };
+    });
+
+    // Count shops with valid calculated distances
+    const shopsWithValidDistance = withDistance.filter(
+      (s) => s.distanceKm !== null
+    );
+
+    // If no shops have valid calculated distances (no order location OR no shop locations)
+    // Return 10 random shops
+    if (shopsWithValidDistance.length === 0) {
+      // Shuffle array randomly
+      const shuffled = withDistance.sort(() => Math.random() - 0.5);
+      const randomShops = shuffled.slice(0, 10).map((s) => ({
+        id: s.id,
+        address: s.address,
+        name: s.name,
+        phone: s.phone,
+        distanceKm: null, // Indicate distance is not available
+        rating: s.rating,
+        products: s.products,
+      }));
+      return res.json(randomShops);
+    }
+
+    // Sort shops by distance (shops with null distance go to end)
+    withDistance.sort((a, b) => {
+      if (a.distanceKm === null) return 1;
+      if (b.distanceKm === null) return -1;
+      return a.distanceKm - b.distanceKm;
+    });
+
+    // Return sorted shops (remove hasValidLocation flag from response)
+    const response = withDistance.map((s) => ({
+      id: s.id,
+      address: s.address,
+      name: s.name,
+      phone: s.phone,
+      distanceKm: s.distanceKm,
+      rating: s.rating,
+      products: s.products,
+    }));
+
+    res.json(response);
+  } catch (err) {
+    console.error("getNearestShopsForOrder", err);
+    res.status(500).json({ message: "Failed to load nearest shops" });
+  }
 };
