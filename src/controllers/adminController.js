@@ -314,7 +314,7 @@ export const getNearestShopsForOrder = async (req, res) => {
             .populate("products", "name")
             .lean();
 
-        const withDistance = shops.map((s) => {
+        let withDistance = shops.map((s) => {
             let distanceKm = 1;
 
             const shopLat = s.address?.latitude;
@@ -343,6 +343,13 @@ export const getNearestShopsForOrder = async (req, res) => {
         });
 
         withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
+
+        // If no shops found with valid distance (e.g., all have default distance), return at least 10 shops
+        // Or, if all distances are the default (1), treat as "no nearest"
+        const hasRealDistance = withDistance.some(s => s.distanceKm !== 1);
+        if (!hasRealDistance) {
+            withDistance = withDistance.slice(0, 10);
+        }
 
         res.json(withDistance);
     } catch (err) {
