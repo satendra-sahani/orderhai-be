@@ -1,19 +1,34 @@
+// src/controllers/cartController.ts (or wherever this file lives)
 import { Cart } from "../models/Cart.js";
 import { Order } from "../models/Order.js";
 import { Product } from "../models/Product.js";
+import mongoose from "mongoose";
 
+// Small counter collection for atomic orderId increments
+const orderCounterSchema = new mongoose.Schema(
+  {
+    _id: { type: String, default: "order" },
+    seq: { type: Number, default: 1000 },
+  },
+  { collection: "order_counters" }
+);
+
+const OrderCounter =
+  mongoose.models.OrderCounter ||
+  mongoose.model("OrderCounter", orderCounterSchema);
+
+// Generate unique ORDER<number> using atomic increment
 const generateOrderCode = async () => {
-  // Get last order to increment number
-  const last = await Order.findOne().sort({ createdAt: -1 }).select("orderId").lean()
+  const counter = await OrderCounter.findOneAndUpdate(
+    { _id: "order" },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  ).lean();
 
-  let nextNumber = 1000
-  if (last?.orderId && /^ORDER\d+$/.test(last.orderId)) {
-    const n = parseInt(last.orderId.replace("ORDER", ""), 10)
-    if (!Number.isNaN(n)) nextNumber = n + 1
-  }
+  const nextNumber = counter.seq;
+  return `ORDER${nextNumber}`;
+};
 
-  return `ORDER${nextNumber}`
-}
 // Helper to calculate totals from items
 const calcTotals = items => {
   const subtotal = items.reduce((sum, it) => sum + it.price * it.qty, 0);
@@ -42,7 +57,7 @@ export const addToCart = async (req, res) => {
     return res.status(404).json({ message: "Product not found" });
   }
 
-  const price = product.sellingPrice; // same as listProducts public response [file:5]
+  const price = product.sellingPrice;
 
   let cart = await Cart.findOne({ user: userId });
   if (!cart) {
@@ -118,7 +133,7 @@ export const removeFromCart = async (req, res) => {
   res.json(cart);
 };
 
-// DELETE /api/cart  – clear cart
+// DELETE /api/cart – clear cart
 export const clearCart = async (req, res) => {
   const userId = req.user.id;
   const cart = await Cart.findOneAndUpdate(
@@ -129,10 +144,11 @@ export const clearCart = async (req, res) => {
   res.json(cart || { user: userId, items: [] });
 };
 
-// POST /api/orders  body: { items, paymentMethod, address, phone, name, notes }
+// POST /api/orders  body: { items, paymentMethod, address, phone, name, notes, location }
 export const createOrder = async (req, res) => {
   const userId = req.user?.id;
-  const { items, paymentMethod, address, phone, name, notes, location } = req.body;
+  const { items, paymentMethod, address, phone, name, notes, location } =
+    req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Items required" });
@@ -140,13 +156,9 @@ export const createOrder = async (req, res) => {
   if (!address) return res.status(400).json({ message: "Address required" });
   if (!phone) return res.status(400).json({ message: "Phone required" });
 
-  // calculate totals (same as before)
-  const subtotal = items.reduce((sum, it) => sum + it.price * it.qty, 0);
-  const deliveryFee = subtotal >= 199 ? 0 : 20;
-  const total = subtotal + deliveryFee;
+  const { subtotal, deliveryFee, total } = calcTotals(items);
 
   // parse lat,lng from location or address
-  // FE can send: location: { lat, lng } OR embed in address "28.1234, 76.1234"
   let lat;
   let lng;
 
@@ -155,7 +167,7 @@ export const createOrder = async (req, res) => {
     lng = location.lng;
   } else {
     const match = String(address).match(
-      /([-+]?[0-9]*\\.?[0-9]+)[,\\s]+([-+]?[0-9]*\\.?[0-9]+)/
+      /([-+]?[0-9]*\.?[0-9]+)[,\s]+([-+]?[0-9]*\.?[0-9]+)/
     );
     if (match) {
       lat = parseFloat(match[1]);
@@ -163,13 +175,8 @@ export const createOrder = async (req, res) => {
     }
   }
 
-  const last = await Order.findOne().sort({ createdAt: -1 }).select("orderId").lean();
-  let nextNumber = 1000;
-  if (last?.orderId && /^ORDER\\d+$/.test(last.orderId)) {
-    const n = parseInt(last.orderId.replace("ORDER", ""), 10);
-    if (!Number.isNaN(n)) nextNumber = n + 1;
-  }
-  const orderId = `ORDER${nextNumber}`;
+  // unique orderId
+  const orderId = await generateOrderCode();
 
   const order = await Order.create({
     user: userId || undefined,
@@ -183,8 +190,6 @@ export const createOrder = async (req, res) => {
     orderId,
     total,
     paymentMethod: paymentMethod || "COD",
-
-    // NEW fields
     lat,
     lng,
     status: "PENDING",
