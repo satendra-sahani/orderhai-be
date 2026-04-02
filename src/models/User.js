@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs"
 
 const addressSchema = new mongoose.Schema(
     {
-        label: { type: String, default: "Home" },           // Home / Office etc.
+        label: { type: String, default: "Home" },
         line1: { type: String, required: true },
         line2: String,
         city: String,
@@ -16,6 +16,47 @@ const addressSchema = new mongoose.Schema(
     { _id: true },
 )
 
+const distributorProfileSchema = new mongoose.Schema(
+    {
+        businessName: String,
+        gstin: String,
+        territory: String,
+        creditLimit: { type: Number, default: 0 },
+        creditUsed: { type: Number, default: 0 },
+        paymentTerms: {
+            type: String,
+            enum: ["NET_7", "NET_15", "NET_30", "COD"],
+            default: "COD",
+        },
+        minOrderValue: { type: Number, default: 0 },
+        isApproved: { type: Boolean, default: false },
+        approvedAt: Date,
+        approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    },
+    { _id: false },
+)
+
+const deliveryProfileSchema = new mongoose.Schema(
+    {
+        vehicleType: String,
+        vehicleNumber: String,
+        assignedZone: String,
+        isAvailable: { type: Boolean, default: true },
+        currentLocation: {
+            lat: Number,
+            lng: Number,
+        },
+        bankAccount: {
+            accountNumber: String,
+            ifsc: String,
+            accountHolder: String,
+        },
+        totalEarnings: { type: Number, default: 0 },
+        pendingSettlement: { type: Number, default: 0 },
+    },
+    { _id: false },
+)
+
 const userSchema = new mongoose.Schema(
     {
         phone: { type: String, unique: true, sparse: true },
@@ -23,14 +64,26 @@ const userSchema = new mongoose.Schema(
         email: { type: String, unique: true, sparse: true },
         name: String,
 
-        passwordHash: String,        // for password login if needed
+        passwordHash: String,
         otpCode: String,
         otpExpiresAt: Date,
 
         lastLoginAt: Date,
         lastLoginIp: String,
         lastLoginDevice: String,
-        isAdmin: { type: Boolean, default: false },
+
+        role: {
+            type: String,
+            enum: ["customer", "distributor", "delivery_boy", "admin"],
+            default: "customer",
+        },
+
+        distributorProfile: distributorProfileSchema,
+        deliveryProfile: deliveryProfileSchema,
+
+        wallet: { type: Number, default: 0 },
+        referralCode: { type: String, unique: true, sparse: true },
+        referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
         addresses: [addressSchema],
         favorites: [

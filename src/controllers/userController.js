@@ -9,6 +9,7 @@ export const getMe = async (req, res) => {
     id: u._id,
     phone: u.phone,
     name: u.name,
+    role: u.role || "customer",
     lastLoginAt: u.lastLoginAt,
     lastLoginIp: u.lastLoginIp,
     lastLoginDevice: u.lastLoginDevice,

@@ -11,6 +11,17 @@ import {
   removeFavorite,
 } from "../controllers/userController.js"
 import { addToCart, cancelOrder, clearCart, createOrder, getCart, getMyOrders, removeFromCart, updateCartItem } from "../controllers/orderController.js"
+import {
+  createSubscription,
+  getMySubscriptions,
+  updateSubscription,
+  pauseSubscription,
+  resumeSubscription,
+  cancelSubscription,
+} from "../controllers/subscriptionController.js"
+import { validateCoupon } from "../controllers/couponController.js"
+import { getWallet, getReferralCode, applyReferral } from "../controllers/walletController.js"
+import { createComplaint, getMyComplaints } from "../controllers/complaintController.js"
 
 const router = Router()
 
@@ -40,6 +51,26 @@ router.get("/favorites",  listFavorites);
 router.post("/favorites/:productId",  addFavorite);
 router.delete("/favorites/:productId",  removeFavorite);
 
+// Subscriptions
+router.post("/subscriptions", createSubscription);
+router.get("/subscriptions", getMySubscriptions);
+router.patch("/subscriptions/:id", updateSubscription);
+router.post("/subscriptions/:id/pause", pauseSubscription);
+router.post("/subscriptions/:id/resume", resumeSubscription);
+router.delete("/subscriptions/:id", cancelSubscription);
 
+// Coupons
+router.post("/coupons/validate", validateCoupon);
+
+// Wallet
+router.get("/wallet", getWallet);
+
+// Referral
+router.get("/referral-code", getReferralCode);
+router.post("/referral", applyReferral);
+
+// Complaints
+router.post("/complaints", createComplaint);
+router.get("/complaints", getMyComplaints);
 
 export default router

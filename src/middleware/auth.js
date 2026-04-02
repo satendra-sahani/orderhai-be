@@ -18,12 +18,19 @@ export const authRequired = async (req, res, next) => {
     return res.status(401).json({ message: "Invalid token" })
   }
 }
-// ✅ Auth + Admin check (for admin routes)
-export const adminRequired = async (req, res, next) => {
+
+// Generic role-based middleware
+export const roleRequired = (...roles) => async (req, res, next) => {
   await authRequired(req, res, () => {
-    if (!req.user.isAdmin) {
-      return res.status(403).json({ message: "Admin access required" })
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: `Access denied. Required role: ${roles.join(" or ")}` })
     }
     next()
   })
 }
+
+// Convenience aliases
+export const adminRequired = roleRequired("admin")
+export const distributorRequired = roleRequired("distributor", "admin")
+export const deliveryBoyRequired = roleRequired("delivery_boy", "admin")
+export const customerRequired = roleRequired("customer", "admin")

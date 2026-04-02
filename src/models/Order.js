@@ -56,20 +56,38 @@ const orderSchema = new mongoose.Schema(
       default: "COD",
     },
 
+    orderType: {
+      type: String,
+      enum: ["B2C", "B2B", "SUBSCRIPTION"],
+      default: "B2C",
+    },
+
+    deliverySlot: {
+      type: String,
+      enum: ["MORNING", "AFTERNOON", "EVENING"],
+    },
+    deliveryDate: { type: Date },
+
     // ADMIN FIELDS (for dashboard)
     status: {
       type: String,
-      enum: ["PENDING", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"],
+      enum: ["PENDING", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED", "RETURNED"],
       default: "PENDING",
     },
 
+    distributor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
     shop: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shop",
       default: null,
     },
     deliveryBoy: {
-      type: String, // simple name string
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
     },
 
@@ -85,7 +103,19 @@ const orderSchema = new mongoose.Schema(
 
     couponCode: { type: String },
     offerPrice: { type: Number },
+    couponDiscount: { type: Number, default: 0 },
+    walletUsed: { type: Number, default: 0 },
 
+    subscription: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Subscription",
+    },
+    invoice: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Invoice",
+    },
+
+    deliveryOtp: { type: String },
     otp: { type: String },
 
     timeline: {

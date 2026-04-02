@@ -6,7 +6,7 @@ const genOtp = () =>
   Math.floor(100000 + Math.random() * 900000).toString() // 6-digit
 
 const signToken = (user) =>
-  jwt.sign({ sub: user._id.toString() }, JWT_SECRET, {
+  jwt.sign({ sub: user._id.toString(), role: user.role || "customer" }, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN || "7d",
   })
 
@@ -89,6 +89,7 @@ export const verifyOtp = async (req, res) => {
             id: user._id,
             phone: user.phone,
             name: user.name,
+            role: user.role || "customer",
         },
     })
 }

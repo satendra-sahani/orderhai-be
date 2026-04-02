@@ -5,7 +5,12 @@ import userRoutes from "./routes/userRoutes.js"
 import shopRoutes from "./routes/shopRoutes.js"
 import productRoutes from "./routes/productRoutes.js"
 import adminRoutes  from "./routes/adminRoutes.js"
+import distributorRoutes from "./routes/distributorRoutes.js"
+import deliveryRoutes from "./routes/deliveryRoutes.js"
+import paymentRoutes from "./routes/paymentRoutes.js"
+import slotRoutes from "./routes/slotRoutes.js"
 import { connectDB } from "./config/db.js"
+import { generateSubscriptionOrders } from "./jobs/subscriptionCron.js"
 
 const app = express()
 
@@ -32,6 +37,25 @@ app.use("/api/users", userRoutes)
 app.use("/api/shops", shopRoutes)
 app.use("/api/products", productRoutes)
 app.use("/api/admin", adminRoutes)
+app.use("/api/distributor", distributorRoutes)
+app.use("/api/delivery", deliveryRoutes)
+app.use("/api/payments", paymentRoutes)
+app.use("/api/slots", slotRoutes)
+
+// Cron endpoint for subscription order generation (called by Vercel Cron)
+app.post("/api/internal/generate-subscription-orders", async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && req.headers["x-cron-secret"] !== cronSecret) {
+    return res.status(401).json({ message: "Unauthorized" })
+  }
+  try {
+    const results = await generateSubscriptionOrders()
+    res.json({ message: "Subscription orders generated", ...results })
+  } catch (err) {
+    console.error("Subscription cron failed:", err)
+    res.status(500).json({ message: "Cron failed" })
+  }
+})
 
 app.use((err, _req, res, _next) => {
   console.error(err)

@@ -2,6 +2,8 @@
 import { Cart } from "../models/Cart.js";
 import { Order } from "../models/Order.js";
 import { Product } from "../models/Product.js";
+import { User } from "../models/User.js";
+import { Zone } from "../models/Zone.js";
 import mongoose from "mongoose";
 
 // Small counter collection for atomic orderId increments
@@ -28,6 +30,29 @@ const generateOrderCode = async () => {
   const nextNumber = counter.seq;
   return `ORDER${nextNumber}`;
 };
+
+// Find best distributor for a customer order based on address/zone
+const findDistributor = async (address, city) => {
+  // 1. Try matching by territory (city name in address)
+  const searchTerms = [city, address].filter(Boolean).join(" ").toLowerCase()
+  const approvedDistributors = await User.find({
+    role: "distributor",
+    "distributorProfile.isApproved": true,
+  }).lean()
+
+  if (approvedDistributors.length === 0) return null
+
+  // 2. Match by territory keyword in address
+  for (const d of approvedDistributors) {
+    const territory = (d.distributorProfile?.territory || "").toLowerCase()
+    if (territory && searchTerms.includes(territory)) {
+      return d._id
+    }
+  }
+
+  // 3. Fallback: first approved distributor (round-robin could be added later)
+  return approvedDistributors[0]._id
+}
 
 // Helper to calculate totals from items
 const calcTotals = items => {
@@ -178,6 +203,9 @@ export const createOrder = async (req, res) => {
   // unique orderId
   const orderId = await generateOrderCode();
 
+  // Auto-assign distributor based on address/city
+  const distributorId = await findDistributor(address, location?.city)
+
   const order = await Order.create({
     user: userId || undefined,
     name,
@@ -192,6 +220,7 @@ export const createOrder = async (req, res) => {
     paymentMethod: paymentMethod || "COD",
     lat,
     lng,
+    distributor: distributorId || undefined,
     status: "PENDING",
     paymentMode: paymentMethod === "ONLINE" ? "ONLINE" : "CASH",
     shopPrice: 0,
